@@ -1,7 +1,7 @@
 const { Telegraf, Scenes, session } = require('telegraf');
 const db = require('./database');
 const bot = new Telegraf("7710181262:AAEcoClGvLibcUsPoRdG3pZ1UNHnwZDV3OU");
-
+const path = require('path');
 const stage = new Scenes.Stage([], { default: 'survey' });
 bot.use(session());
 bot.use(stage.middleware());
@@ -43,7 +43,15 @@ bot.on('photo', (ctx) => {
 
 function getEstablishments(ctx) {
     db.all('SELECT * FROM establishments', [], (err, rows) => {
-        if (err) throw err;
+        if (err) {
+            console.error(err);
+            ctx.reply('Ошибка при получении заведений');
+            return;
+        }
+        if (rows.length === 0) {
+            ctx.reply('Заведений не найдено.');
+            return;
+        }
         const keyboard = rows.map(row => [row.name]);
         ctx.reply('Выберите заведение:', {
             reply_markup: {
@@ -62,31 +70,68 @@ function startSurvey(ctx) {
 
 function getQuestionsForEstablishment(ctx, establishmentName) {
     db.get('SELECT id FROM establishments WHERE name = ?', [establishmentName], (err, row) => {
-        if (err) throw err;
+        if (err) {
+            console.error(err);
+            ctx.reply('Ошибка при получении заведения.');
+            return;
+        }
         if (!row) {
             ctx.reply('Заведение не найдено. Пожалуйста, выберите заведение из списка.');
             return;
         }
         db.all('SELECT * FROM questions WHERE establishment_id = ?', [row.id], (err, rows) => {
-            if (err) throw err;
+            if (err) {
+                console.error(err);
+                ctx.reply('Ошибка при получении вопросов.');
+                return;
+            }
+            if (rows.length === 0) {
+                ctx.reply('Вопросов для этого заведения не найдено.');
+                return;
+            }
             questions = rows;
             askQuestion(ctx, questions);
         });
     });
 }
+const fs = require('fs');
 
 function askQuestion(ctx, questions) {
     if (currentQuestionIndex < questions.length) {
-        const question = questions[currentQuestionIndex];
-        const message = question.photo_path ? `${question.text}\n\n<a href="${question.photo_path}">Фото</a>` : question.text;
-        ctx.reply(message, {
-            parse_mode: 'HTML',
-            reply_markup: {
-                keyboard: [['Да', 'Нет'], ['Комментарий']],
-                one_time_keyboard: true,
-                resize_keyboard: true,
+        const question = questions[currentQuestionIndex]; // Определяем question внутри функции
+
+        if (question.photo_path) {
+            // Создаем полный путь к изображению
+            const photoPath = path.join(__dirname, 'uploads', question.photo_path);
+
+            // Проверяем, существует ли файл по этому пути
+            if (fs.existsSync(photoPath)) {
+                ctx.sendPhoto({ source: fs.createReadStream(photoPath) }, {
+                    caption: question.text,
+                    reply_markup: {
+                        keyboard: [['Да', 'Нет'], ['Комментарий']],
+                        one_time_keyboard: true,
+                        resize_keyboard: true,
+                    }
+                });
+            } else {
+                ctx.reply(question.text, {
+                    reply_markup: {
+                        keyboard: [['Да', 'Нет'], ['Комментарий']],
+                        one_time_keyboard: true,
+                        resize_keyboard: true,
+                    }
+                });
             }
-        });
+        } else {
+            ctx.reply(question.text, {
+                reply_markup: {
+                    keyboard: [['Да', 'Нет'], ['Комментарий']],
+                    one_time_keyboard: true,
+                    resize_keyboard: true,
+                }
+            });
+        }
     } else {
         ctx.reply('Спасибо за ответы!');
         saveSurveyResults(ctx, questions);
@@ -97,13 +142,14 @@ function processAnswer(ctx) {
     const answer = ctx.message.text;
     if (answer === 'Комментарий') {
         ctx.reply('Введите ваш комментарий:');
-        ctx.wizard.next();
+        // Логика для комментариев (можно добавить логику сохранения комментария)
     } else {
         currentUser.answers.push({ type: 'text', value: answer === 'Да' ? 1 : 0 });
         currentQuestionIndex++;
         askQuestion(ctx, questions);
     }
 }
+
 
 function saveSurveyResults(ctx, questions) {
     db.get('SELECT id FROM establishments WHERE name = ?', [currentUser.establishment], (err, row) => {
