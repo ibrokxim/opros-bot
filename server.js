@@ -1,17 +1,30 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const db = require('./database');
 const ExcelJS = require('exceljs');
+const path = require('path');
+const db = require('./database');
+const bodyParser = require('body-parser');
+const express = require('express');
+const multer = require('multer');
 const app = express();
 
-app.use(bodyParser.urlencoded({ extended: true }));
 app.set('view engine', 'ejs');
 app.use(express.static('public'));
+app.use(bodyParser.urlencoded({ extended: true }));
 
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'uploads/');
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + path.extname(file.originalname));
+    }
+});
 
-function sanitizeFilename(filename){
+const upload = multer({ storage: storage });
+
+function sanitizeFilename(filename) {
     return filename.replace(/[^a-zA-Z0-9_\-]/g, '_');
 }
+
 app.get('/', (req, res) => {
     db.all('SELECT * FROM establishments', [], (err, establishments) => {
         if (err) throw err;
@@ -19,23 +32,19 @@ app.get('/', (req, res) => {
     });
 });
 
-// Страница добавления заведения и вопросов
 app.get('/add-establishment', (req, res) => {
     res.render('add-establishment');
 });
 
-// Обработка формы добавления заведения и вопросов
 app.post('/add-establishment', (req, res) => {
     const { name } = req.body;
-    db.run('INSERT INTO establishments (name) VALUES (?)', [name], function(err) {
+    db.run('INSERT INTO establishments (name) VALUES (?)', [name], function (err) {
         if (err) throw err;
         const establishmentId = this.lastID;
         res.redirect(`/edit/${establishmentId}`);
     });
 });
 
-
-// Редактирование заведения
 app.get('/edit/:id', (req, res) => {
     const id = req.params.id;
     db.get('SELECT * FROM establishments WHERE id = ?', [id], (err, establishment) => {
@@ -56,7 +65,6 @@ app.post('/edit/:id', (req, res) => {
     });
 });
 
-// Удаление заведения
 app.get('/delete-establishment/:id', (req, res) => {
     const id = req.params.id;
     db.run('DELETE FROM establishments WHERE id = ?', [id], (err) => {
@@ -65,30 +73,42 @@ app.get('/delete-establishment/:id', (req, res) => {
     });
 });
 
-// Добавление вопроса
-app.post('/add-question/:establishment_id', (req, res) => {
+app.post('/add-question/:establishment_id', upload.single('photo'), (req, res) => {
     const establishment_id = req.params.establishment_id;
     const { text } = req.body;
-    db.run('INSERT INTO questions (establishment_id, text) VALUES (?, ?)', [establishment_id, text], (err) => {
+    const photo_path = req.file ? `/uploads/${req.file.filename}` : null;
+    db.run('INSERT INTO questions (establishment_id, text, photo_path) VALUES (?, ?, ?)', [establishment_id, text, photo_path], (err) => {
         if (err) throw err;
         res.redirect(`/edit/${establishment_id}`);
     });
 });
 
-// Редактирование вопроса
-app.post('/edit-question/:id', (req, res) => {
+app.post('/edit-question/:id', upload.single('photo'), (req, res) => {
     const id = req.params.id;
     const { text } = req.body;
-    db.run('UPDATE questions SET text = ? WHERE id = ?', [text, id], (err) => {
-        if (err) throw err;
-        db.get('SELECT establishment_id FROM questions WHERE id = ?', [id], (err, row) => {
+    const photo_path = req.file ? `/uploads/${req.file.filename}` : null;
+
+    if (photo_path) {
+        // Если новое фото загружено, обновляем текст и путь к фото
+        db.run('UPDATE questions SET text = ?, photo_path = ? WHERE id = ?', [text, photo_path, id], (err) => {
             if (err) throw err;
-            res.redirect(`/edit/${row.establishment_id}`);
+            db.get('SELECT establishment_id FROM questions WHERE id = ?', [id], (err, row) => {
+                if (err) throw err;
+                res.redirect(`/edit/${row.establishment_id}`);
+            });
         });
-    });
+    } else {
+        // Если фото не загружено, обновляем только текст
+        db.run('UPDATE questions SET text = ? WHERE id = ?', [text, id], (err) => {
+            if (err) throw err;
+            db.get('SELECT establishment_id FROM questions WHERE id = ?', [id], (err, row) => {
+                if (err) throw err;
+                res.redirect(`/edit/${row.establishment_id}`);
+            });
+        });
+    }
 });
 
-// Удаление вопроса
 app.get('/delete-question/:id', (req, res) => {
     const id = req.params.id;
     db.get('SELECT establishment_id FROM questions WHERE id = ?', [id], (err, row) => {
@@ -99,7 +119,6 @@ app.get('/delete-question/:id', (req, res) => {
         });
     });
 });
-
 
 app.get('/stats/:id', (req, res) => {
     const id = req.params.id;
@@ -125,8 +144,6 @@ app.get('/stats/:id', (req, res) => {
         });
     });
 });
-
-
 
 app.get('/download-stats/:id', (req, res) => {
     const id = req.params.id;
@@ -180,8 +197,6 @@ app.get('/download-stats/:id', (req, res) => {
     });
 });
 
-
-// Запуск сервера
 app.listen(3000, () => {
     console.log('Админ-панель запущена на http://localhost:3000');
 });

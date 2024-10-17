@@ -1,12 +1,15 @@
-const { Telegraf } = require('telegraf');
+const { Telegraf, Scenes, session } = require('telegraf');
 const db = require('./database');
 const bot = new Telegraf("7710181262:AAEcoClGvLibcUsPoRdG3pZ1UNHnwZDV3OU");
+
+const stage = new Scenes.Stage([], { default: 'survey' });
+bot.use(session());
+bot.use(stage.middleware());
 
 let currentUser = {};
 let currentQuestionIndex = 0;
 let questions = [];
 
-// Старт бота
 bot.start((ctx) => {
     ctx.reply('Привет! Введите ваше имя:');
     currentUser = {
@@ -17,7 +20,6 @@ bot.start((ctx) => {
     };
 });
 
-// Обработка имени пользователя
 bot.on('text', (ctx) => {
     if (!currentUser.name) {
         currentUser.name = ctx.message.text;
@@ -30,7 +32,15 @@ bot.on('text', (ctx) => {
     }
 });
 
-// Получение списка заведений
+bot.on('photo', (ctx) => {
+    if (currentQuestionIndex < questions.length) {
+        const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+        currentUser.answers.push({ type: 'photo', value: photo });
+        currentQuestionIndex++;
+        askQuestion(ctx, questions);
+    }
+});
+
 function getEstablishments(ctx) {
     db.all('SELECT * FROM establishments', [], (err, rows) => {
         if (err) throw err;
@@ -45,16 +55,18 @@ function getEstablishments(ctx) {
     });
 }
 
-// Начало опроса
 function startSurvey(ctx) {
     currentQuestionIndex = 0;
     getQuestionsForEstablishment(ctx, currentUser.establishment);
 }
 
-// Получение вопросов для заведения
 function getQuestionsForEstablishment(ctx, establishmentName) {
     db.get('SELECT id FROM establishments WHERE name = ?', [establishmentName], (err, row) => {
         if (err) throw err;
+        if (!row) {
+            ctx.reply('Заведение не найдено. Пожалуйста, выберите заведение из списка.');
+            return;
+        }
         db.all('SELECT * FROM questions WHERE establishment_id = ?', [row.id], (err, rows) => {
             if (err) throw err;
             questions = rows;
@@ -63,10 +75,12 @@ function getQuestionsForEstablishment(ctx, establishmentName) {
     });
 }
 
-// Задание вопроса
 function askQuestion(ctx, questions) {
     if (currentQuestionIndex < questions.length) {
-        ctx.reply(questions[currentQuestionIndex].text, {
+        const question = questions[currentQuestionIndex];
+        const message = question.photo_path ? `${question.text}\n\n<a href="${question.photo_path}">Фото</a>` : question.text;
+        ctx.reply(message, {
+            parse_mode: 'HTML',
             reply_markup: {
                 keyboard: [['Да', 'Нет'], ['Комментарий']],
                 one_time_keyboard: true,
@@ -79,24 +93,18 @@ function askQuestion(ctx, questions) {
     }
 }
 
-// Обработка ответа
 function processAnswer(ctx) {
     const answer = ctx.message.text;
     if (answer === 'Комментарий') {
         ctx.reply('Введите ваш комментарий:');
-        bot.once('text', (ctx) => {
-            currentUser.comments.push(ctx.message.text);
-            currentQuestionIndex++;
-            askQuestion(ctx, questions);
-        });
+        ctx.wizard.next();
     } else {
-        currentUser.answers.push(answer === '1' ? 1 : 0);
+        currentUser.answers.push({ type: 'text', value: answer === 'Да' ? 1 : 0 });
         currentQuestionIndex++;
         askQuestion(ctx, questions);
     }
 }
 
-// Сохранение результатов опроса
 function saveSurveyResults(ctx, questions) {
     db.get('SELECT id FROM establishments WHERE name = ?', [currentUser.establishment], (err, row) => {
         if (err) throw err;
@@ -104,12 +112,11 @@ function saveSurveyResults(ctx, questions) {
             db.run('INSERT INTO surveys (user_name, establishment_id, answer, comment) VALUES (?, ?, ?, ?)', [
                 currentUser.name,
                 row.id,
-                answer,
+                answer.value,
                 currentUser.comments[index] || null
             ]);
         });
     });
 }
 
-// Запуск бота
 bot.launch();

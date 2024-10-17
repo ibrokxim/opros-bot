@@ -11,6 +11,7 @@ db.serialize(() => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         establishment_id INTEGER NOT NULL,
         text TEXT NOT NULL,
+        photo_path TEXT,
         FOREIGN KEY(establishment_id) REFERENCES establishments(id)
     )`);
 

@@ -166,6 +166,7 @@
                             <tr>
                                 <th>#</th>
                                 <th>Вопрос</th>
+                                <th>Фото</th>
                                 <th>Изменить</th>
                                 <th>Удалить</th>
                             </tr>
@@ -176,8 +177,16 @@
                                     <td><%= index + 1 %></td>
                                     <td><%= question.text %></td>
                                     <td>
-                                        <form method="post" action="/edit-question/<%= question.id %>">
+                                        <% if (question.photo_path) { %>
+                                            <img src="http://localhost:3000<%= question.photo_path %>" alt="Фото вопроса" style="max-width: 100px;">
+                                        <% } else { %>
+                                            Нет фото
+                                        <% } %>
+                                    </td>
+                                    <td>
+                                        <form method="post" action="/edit-question/<%= question.id %>" enctype="multipart/form-data">
                                             <textarea type="text" class="form-control" name="text" ><%= question.text %></textarea>
+                                            <input type="file" class="form-control" name="photo">
                                             <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
                                         </form>
                                     </td>
@@ -189,10 +198,14 @@
                             </tbody>
                         </table>
                         <h2>Вопросы</h2>
-                        <form class="card-body" method="post" action="/add-question/<%= establishment.id %>">
+                        <form class="card-body" method="post" action="/add-question/<%= establishment.id %>" enctype="multipart/form-data">
                             <div class="mb-3">
                                 <label for="exampleFormControlSelect1" class="form-label">Добавить вопрос</label>
                                 <textarea type="text" class="form-control" name="text" id="exampleFormControlSelect1" placeholder="Текст вопроса"></textarea>
+                            </div>
+                            <div class="mb-3">
+                                <label for="exampleFormControlSelect1" class="form-label">Добавить фотографию</label>
+                                <input type="file" class="form-control" name="photo">
                             </div>
                             <button type="submit" class="btn btn-primary">Добавить вопрос</button>
                         </form>
