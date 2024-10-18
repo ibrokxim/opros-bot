@@ -102,7 +102,7 @@ function askQuestion(ctx, questions) {
 
         if (question.photo_path) {
             // Создаем полный путь к изображению
-            const photoPath = path.join(__dirname, 'uploads', question.photo_path);
+            const photoPath  = path.join(__dirname, 'uploads', question.photo_path);
 
             // Проверяем, существует ли файл по этому пути
             if (fs.existsSync(photoPath)) {

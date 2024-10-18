@@ -165,9 +165,9 @@
                             <thead>
                             <tr>
                                 <th>#</th>
-                                <th>Вопрос</th>
-                                <th>Фото</th>
+<!--                                <th>Вопрос</th>-->
                                 <th>Изменить</th>
+                                <th>Фото</th>
                                 <th>Удалить</th>
                             </tr>
                             </thead>
@@ -175,20 +175,23 @@
                             <% questions.forEach((question, index) => { %>
                                 <tr>
                                     <td><%= index + 1 %></td>
-                                    <td><%= question.text %></td>
+<!--                                    <td><%= question.text %></td>-->
+
+                                    <td>
+                                        <form method="post" action="/edit-question/<%= question.id %>" enctype="multipart/form-data">
+                                            <textarea type="text" class="form-control" name="text" ><%= question.text %></textarea>
+                                            <br>
+                                            <input type="file" class="form-control" name="photo">
+                                            <br>
+                                            <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
+                                        </form>
+                                    </td>
                                     <td>
                                         <% if (question.photo_path) { %>
                                             <img src="http://localhost:3000<%= question.photo_path %>" alt="Фото вопроса" style="max-width: 100px;">
                                         <% } else { %>
                                             Нет фото
                                         <% } %>
-                                    </td>
-                                    <td>
-                                        <form method="post" action="/edit-question/<%= question.id %>" enctype="multipart/form-data">
-                                            <textarea type="text" class="form-control" name="text" ><%= question.text %></textarea>
-                                            <input type="file" class="form-control" name="photo">
-                                            <button type="submit" class="btn btn-primary btn-sm">Сохранить</button>
-                                        </form>
                                     </td>
                                     <td>
                                         <a href="/delete-question/<%= question.id %>" class="btn btn-danger btn-sm">Удалить</a>
