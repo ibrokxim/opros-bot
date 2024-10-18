@@ -11,13 +11,60 @@ let currentQuestionIndex = 0;
 let questions = [];
 
 bot.start((ctx) => {
-    ctx.reply('Привет! Введите ваше имя:');
+    ctx.reply('Привет! Добро пожаловать в наш бот для тайных опросов!\nВведите пожалуйста ваше ФИО:');
     currentUser = {
         name: '',
         establishment: '',
         answers: [],
         comments: []
     };
+});
+
+bot.action('continue', (ctx) => {
+    ctx.answerCbQuery();
+    if (confirmationMessageId) {
+        ctx.deleteMessage(confirmationMessageId).then(() => {
+            confirmationMessageId = null; // Сбрасываем идентификатор сообщения
+            db.all('SELECT * FROM questions WHERE establishment_id = ?', [currentUser.establishmentId], (err, rows) => {
+                if (err) {
+                    console.error(err);
+                    ctx.reply('Ошибка при получении вопросов.');
+                    return;
+                }
+                if (rows.length === 0) {
+                    ctx.reply('Вопросов для этого заведения не найдено.');
+                    return;
+                }
+                questions = rows;
+                askQuestion(ctx, questions);
+            });
+        });
+    } else {
+        db.all('SELECT * FROM questions WHERE establishment_id = ?', [currentUser.establishmentId], (err, rows) => {
+            if (err) {
+                console.error(err);
+                ctx.reply('Ошибка при получении вопросов.');
+                return;
+            }
+            if (rows.length === 0) {
+                ctx.reply('Вопросов для этого заведения не найдено.');
+                return;
+            }
+            questions = rows;
+            askQuestion(ctx, questions);
+        });
+    }
+});
+
+bot.action('back', (ctx) => {
+    ctx.answerCbQuery();
+    currentUser = {
+        name: currentUser.name,
+        establishment: '',
+        answers: [],
+        comments: []
+    };
+    getEstablishments(ctx);
 });
 
 bot.on('text', (ctx) => {
@@ -41,6 +88,9 @@ bot.on('photo', (ctx) => {
     }
 });
 
+
+
+
 function getEstablishments(ctx) {
     db.all('SELECT * FROM establishments', [], (err, rows) => {
         if (err) {
@@ -58,6 +108,7 @@ function getEstablishments(ctx) {
                 keyboard: keyboard,
                 one_time_keyboard: true,
                 resize_keyboard: true,
+                remove_keyboard: true,
             }
         });
     });
@@ -67,6 +118,8 @@ function startSurvey(ctx) {
     currentQuestionIndex = 0;
     getQuestionsForEstablishment(ctx, currentUser.establishment);
 }
+
+let confirmationMessageId = null;
 
 function getQuestionsForEstablishment(ctx, establishmentName) {
     db.get('SELECT id FROM establishments WHERE name = ?', [establishmentName], (err, row) => {
@@ -79,21 +132,21 @@ function getQuestionsForEstablishment(ctx, establishmentName) {
             ctx.reply('Заведение не найдено. Пожалуйста, выберите заведение из списка.');
             return;
         }
-        db.all('SELECT * FROM questions WHERE establishment_id = ?', [row.id], (err, rows) => {
-            if (err) {
-                console.error(err);
-                ctx.reply('Ошибка при получении вопросов.');
-                return;
+        currentUser.establishmentId = row.id; // Устанавливаем establishmentId
+        ctx.reply(`Вы выбрали заведение ${establishmentName}.`, {
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'Продолжить', callback_data: 'continue' }],
+                    [{ text: 'Вернуться назад', callback_data: 'back' }]
+                ]
             }
-            if (rows.length === 0) {
-                ctx.reply('Вопросов для этого заведения не найдено.');
-                return;
-            }
-            questions = rows;
-            askQuestion(ctx, questions);
+        }).then(message => {
+            confirmationMessageId = message.message_id; // Сохраняем идентификатор сообщения
         });
     });
 }
+
+
 const fs = require('fs');
 
 function askQuestion(ctx, questions) {
@@ -107,36 +160,59 @@ function askQuestion(ctx, questions) {
             // Проверяем, существует ли файл по этому пути
             if (fs.existsSync(photoPath)) {
                 ctx.sendPhoto({ source: fs.createReadStream(photoPath) }, {
-                    caption: question.text,
+                    caption:  question.text,
                     reply_markup: {
-                        keyboard: [['Да', 'Нет'], ['Комментарий']],
-                        one_time_keyboard: true,
-                        resize_keyboard: true,
+                        inline_keyboard: [
+                            [{ text: 'Да', callback_data: 'yes' }],
+                            [{ text: 'Нет', callback_data: 'no' }],
+                            [{ text: 'Оставить комментарий', callback_data: 'comment' }]
+                        ]
                     }
                 });
             } else {
-                ctx.reply(question.text, {
+                ctx.reply( question.text, {
                     reply_markup: {
-                        keyboard: [['Да', 'Нет'], ['Комментарий']],
-                        one_time_keyboard: true,
-                        resize_keyboard: true,
+                        inline_keyboard: [
+                            [{ text: 'Да', callback_data: 'yes' }],
+                            [{ text: 'Нет', callback_data: 'no' }],
+                            [{ text: 'Оставить комментарий', callback_data: 'comment' }]
+                        ]
                     }
                 });
             }
         } else {
-            ctx.reply(question.text, {
+            ctx.reply( question.text, {
                 reply_markup: {
-                    keyboard: [['Да', 'Нет'], ['Комментарий']],
-                    one_time_keyboard: true,
-                    resize_keyboard: true,
+                    inline_keyboard: [
+                        [{ text: 'Да', callback_data: 'yes' }],
+                        [{ text: 'Нет', callback_data: 'no' }],
+                        [{ text: 'Оставить комментарий', callback_data: 'comment' }]
+                    ]
                 }
             });
         }
     } else {
-        ctx.reply('Спасибо за ответы!');
+        ctx.reply('Спасибо за ответы!',{
+        reply_markup: {
+            remove_keyboard: true // Удаляем все кнопки после завершения опроса
+        }
+    });
         saveSurveyResults(ctx, questions);
     }
 }
+
+bot.action(/^(yes|no|comment)$/, (ctx) => {
+    const answer = ctx.match[1];
+    if (answer === 'comment') {
+        ctx.reply('Введите ваш комментарий:');
+        // Логика для комментариев (можно добавить логику сохранения комментария)
+    } else {
+        currentUser.answers.push({ type: 'text', value: answer === 'yes' ? 1 : 0 });
+        currentQuestionIndex++;
+        askQuestion(ctx, questions);
+    }
+    ctx.answerCbQuery(); // Отвечаем на callback-запрос, чтобы убрать "часики"
+});
 
 function processAnswer(ctx) {
     const answer = ctx.message.text;
@@ -149,6 +225,7 @@ function processAnswer(ctx) {
         askQuestion(ctx, questions);
     }
 }
+
 
 
 function saveSurveyResults(ctx, questions) {
