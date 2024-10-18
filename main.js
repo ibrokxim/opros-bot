@@ -1,14 +1,22 @@
 const { Telegraf, Scenes, session } = require('telegraf');
 const db = require('./database');
 const bot = new Telegraf("7710181262:AAEcoClGvLibcUsPoRdG3pZ1UNHnwZDV3OU");
-const path = require('path');
+const path = require('path')
 const stage = new Scenes.Stage([], { default: 'survey' });
+const fs = require('fs');
 bot.use(session());
 bot.use(stage.middleware());
 
 let currentUser = {};
 let currentQuestionIndex = 0;
 let questions = [];
+let waitingForComment = false; // Флаг для ожидания комментария
+let confirmationMessageId = null;
+
+bot.command('testphoto', (ctx) => {
+    const photoPath = path.join(__dirname, 'uploads', '1729139664243.png');
+    ctx.sendPhoto({ source: fs.createReadStream(photoPath) });
+});
 
 bot.start((ctx) => {
     ctx.reply('Привет! Добро пожаловать в наш бот для тайных опросов!\nВведите пожалуйста ваше ФИО:');
@@ -67,6 +75,19 @@ bot.action('back', (ctx) => {
     getEstablishments(ctx);
 });
 
+bot.action(/^(yes|no|comment)$/, (ctx) => {
+    const answer = ctx.match[1];
+    if (answer === 'comment') {
+        ctx.reply('Введите ваш комментарий:');
+        waitingForComment = true; // Ожидание комментария
+    } else {
+        currentUser.answers.push({ type: 'text', value: answer === 'yes' ? 1 : 0 });
+        currentQuestionIndex++;
+        askQuestion(ctx);
+    }
+    ctx.answerCbQuery();
+});
+
 bot.on('text', (ctx) => {
     if (!currentUser.name) {
         currentUser.name = ctx.message.text;
@@ -79,6 +100,9 @@ bot.on('text', (ctx) => {
     }
 });
 
+
+
+
 bot.on('photo', (ctx) => {
     if (currentQuestionIndex < questions.length) {
         const photo = ctx.message.photo[ctx.message.photo.length - 1].file_id;
@@ -87,9 +111,6 @@ bot.on('photo', (ctx) => {
         askQuestion(ctx, questions);
     }
 });
-
-
-
 
 function getEstablishments(ctx) {
     db.all('SELECT * FROM establishments', [], (err, rows) => {
@@ -112,15 +133,13 @@ function getEstablishments(ctx) {
             }
         });
     });
-}
 
+}
 function startSurvey(ctx) {
     currentQuestionIndex = 0;
     getQuestionsForEstablishment(ctx, currentUser.establishment);
+
 }
-
-let confirmationMessageId = null;
-
 function getQuestionsForEstablishment(ctx, establishmentName) {
     db.get('SELECT id FROM establishments WHERE name = ?', [establishmentName], (err, row) => {
         if (err) {
@@ -144,91 +163,58 @@ function getQuestionsForEstablishment(ctx, establishmentName) {
             confirmationMessageId = message.message_id; // Сохраняем идентификатор сообщения
         });
     });
+
 }
 
-
-const fs = require('fs');
-
-function askQuestion(ctx, questions) {
+function askQuestion(ctx) {
     if (currentQuestionIndex < questions.length) {
-        const question = questions[currentQuestionIndex]; // Определяем question внутри функции
+        const question = questions[currentQuestionIndex];
+        const inlineKeyboard = [
+            [{ text: 'Да', callback_data: 'yes' }],
+            [{ text: 'Нет', callback_data: 'no' }],
+            [{ text: 'Оставить комментарий', callback_data: 'comment' }]
+        ];
 
         if (question.photo_path) {
-            // Создаем полный путь к изображению
-            const photoPath  = path.join(__dirname, 'uploads', question.photo_path);
-
-            // Проверяем, существует ли файл по этому пути
+            const photoPath = path.join(__dirname, 'uploads', question.photo_path);
             if (fs.existsSync(photoPath)) {
-                ctx.sendPhoto({ source: fs.createReadStream(photoPath) }, {
-                    caption:  question.text,
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: 'Да', callback_data: 'yes' }],
-                            [{ text: 'Нет', callback_data: 'no' }],
-                            [{ text: 'Оставить комментарий', callback_data: 'comment' }]
-                        ]
-                    }
+                ctx.sendPhoto(fs.createReadStream(photoPath), {
+                    caption: question.text,
+                    reply_markup: { inline_keyboard: inlineKeyboard }
                 });
             } else {
-                ctx.reply( question.text, {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: 'Да', callback_data: 'yes' }],
-                            [{ text: 'Нет', callback_data: 'no' }],
-                            [{ text: 'Оставить комментарий', callback_data: 'comment' }]
-                        ]
-                    }
-                });
+                ctx.reply(question.text, { reply_markup: { inline_keyboard: inlineKeyboard } });
             }
         } else {
-            ctx.reply( question.text, {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: 'Да', callback_data: 'yes' }],
-                        [{ text: 'Нет', callback_data: 'no' }],
-                        [{ text: 'Оставить комментарий', callback_data: 'comment' }]
-                    ]
-                }
-            });
+            ctx.reply(question.text, { reply_markup: { inline_keyboard: inlineKeyboard } });
         }
     } else {
-        ctx.reply('Спасибо за ответы!',{
-        reply_markup: {
-            remove_keyboard: true // Удаляем все кнопки после завершения опроса
-        }
-    });
-        saveSurveyResults(ctx, questions);
+        ctx.reply('Спасибо за ответы!', {
+            reply_markup: {
+                remove_keyboard: true // Удаляем все кнопки после завершения опроса
+            }
+        });
+        saveSurveyResults(ctx);
     }
 }
-
-bot.action(/^(yes|no|comment)$/, (ctx) => {
-    const answer = ctx.match[1];
-    if (answer === 'comment') {
-        ctx.reply('Введите ваш комментарий:');
-        // Логика для комментариев (можно добавить логику сохранения комментария)
-    } else {
-        currentUser.answers.push({ type: 'text', value: answer === 'yes' ? 1 : 0 });
-        currentQuestionIndex++;
-        askQuestion(ctx, questions);
-    }
-    ctx.answerCbQuery(); // Отвечаем на callback-запрос, чтобы убрать "часики"
-});
 
 function processAnswer(ctx) {
     const answer = ctx.message.text;
-    if (answer === 'Комментарий') {
-        ctx.reply('Введите ваш комментарий:');
-        // Логика для комментариев (можно добавить логику сохранения комментария)
+    if (waitingForComment) {
+        // Сохранение комментария
+        currentUser.comments.push(answer);
+        waitingForComment = false;
+        currentQuestionIndex++;
+        askQuestion(ctx);
     } else {
         currentUser.answers.push({ type: 'text', value: answer === 'Да' ? 1 : 0 });
         currentQuestionIndex++;
-        askQuestion(ctx, questions);
+        askQuestion(ctx);
     }
 }
 
 
-
-function saveSurveyResults(ctx, questions) {
+function saveSurveyResults(ctx) {
     db.get('SELECT id FROM establishments WHERE name = ?', [currentUser.establishment], (err, row) => {
         if (err) throw err;
         currentUser.answers.forEach((answer, index) => {
