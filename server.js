@@ -1,14 +1,22 @@
-const ExcelJS = require('exceljs');
+const express = require('express');
+const bodyParser = require('body-parser');
+const multer = require('multer');
 const path = require('path');
 const db = require('./database');
-const bodyParser = require('body-parser');
-const express = require('express');
-const multer = require('multer');
+const bcrypt = require('bcrypt');
+const session = require('express-session');
+const ExcelJS = require('exceljs');
+
 const app = express();
 
 app.set('view engine', 'ejs');
 app.use(express.static('public'));
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(session({
+    secret: 'your-secret-key',
+    resave: false,
+    saveUninitialized: true
+}));
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
@@ -25,18 +33,48 @@ function sanitizeFilename(filename) {
     return filename.replace(/[^a-zA-Z0-9_\-]/g, '_');
 }
 
-app.get('/', (req, res) => {
+function ensureAuthenticated(req, res, next) {
+    if (req.session && req.session.adminId) {
+        return next();
+    } else {
+        res.redirect('/login');
+    }
+}
+
+app.get('/', ensureAuthenticated, (req, res) => {
     db.all('SELECT * FROM establishments', [], (err, establishments) => {
         if (err) throw err;
         res.render('index', { establishments });
     });
 });
 
-app.get('/add-establishment', (req, res) => {
+app.get('/login', (req, res) => {
+    res.render('login');
+});
+
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+    db.get('SELECT * FROM admins WHERE username = ?', [username], (err, admin) => {
+        if (err) throw err;
+        if (admin && bcrypt.compareSync(password, admin.password)) {
+            req.session.adminId = admin.id;
+            res.redirect('/');
+        } else {
+            res.redirect('/login');
+        }
+    });
+});
+
+app.get('/logout', (req, res) => {
+    req.session.destroy();
+    res.redirect('/login');
+});
+
+app.get('/add-establishment', ensureAuthenticated, (req, res) => {
     res.render('add-establishment');
 });
 
-app.post('/add-establishment', (req, res) => {
+app.post('/add-establishment', ensureAuthenticated, (req, res) => {
     const { name } = req.body;
     db.run('INSERT INTO establishments (name) VALUES (?)', [name], function (err) {
         if (err) throw err;
@@ -45,7 +83,7 @@ app.post('/add-establishment', (req, res) => {
     });
 });
 
-app.get('/edit/:id', (req, res) => {
+app.get('/edit/:id', ensureAuthenticated, (req, res) => {
     const id = req.params.id;
     db.get('SELECT * FROM establishments WHERE id = ?', [id], (err, establishment) => {
         if (err) throw err;
@@ -56,7 +94,7 @@ app.get('/edit/:id', (req, res) => {
     });
 });
 
-app.post('/edit/:id', (req, res) => {
+app.post('/edit/:id', ensureAuthenticated, (req, res) => {
     const id = req.params.id;
     const { name } = req.body;
     db.run('UPDATE establishments SET name = ? WHERE id = ?', [name, id], (err) => {
@@ -65,7 +103,7 @@ app.post('/edit/:id', (req, res) => {
     });
 });
 
-app.get('/delete-establishment/:id', (req, res) => {
+app.get('/delete-establishment/:id', ensureAuthenticated, (req, res) => {
     const id = req.params.id;
     db.run('DELETE FROM establishments WHERE id = ?', [id], (err) => {
         if (err) throw err;
@@ -73,7 +111,7 @@ app.get('/delete-establishment/:id', (req, res) => {
     });
 });
 
-app.post('/add-question/:establishment_id', upload.single('photo'), (req, res) => {
+app.post('/add-question/:establishment_id', ensureAuthenticated, upload.single('photo'), (req, res) => {
     const establishment_id = req.params.establishment_id;
     const { text } = req.body;
     const photo_path = req.file ? `/uploads/${req.file.filename}` : null;
@@ -83,13 +121,12 @@ app.post('/add-question/:establishment_id', upload.single('photo'), (req, res) =
     });
 });
 
-app.post('/edit-question/:id', upload.single('photo'), (req, res) => {
+app.post('/edit-question/:id', ensureAuthenticated, upload.single('photo'), (req, res) => {
     const id = req.params.id;
     const { text } = req.body;
     const photo_path = req.file ? `/uploads/${req.file.filename}` : null;
 
     if (photo_path) {
-        // Если новое фото загружено, обновляем текст и путь к фото
         db.run('UPDATE questions SET text = ?, photo_path = ? WHERE id = ?', [text, photo_path, id], (err) => {
             if (err) throw err;
             db.get('SELECT establishment_id FROM questions WHERE id = ?', [id], (err, row) => {
@@ -98,7 +135,6 @@ app.post('/edit-question/:id', upload.single('photo'), (req, res) => {
             });
         });
     } else {
-        // Если фото не загружено, обновляем только текст
         db.run('UPDATE questions SET text = ? WHERE id = ?', [text, id], (err) => {
             if (err) throw err;
             db.get('SELECT establishment_id FROM questions WHERE id = ?', [id], (err, row) => {
@@ -109,7 +145,7 @@ app.post('/edit-question/:id', upload.single('photo'), (req, res) => {
     }
 });
 
-app.get('/delete-question/:id', (req, res) => {
+app.get('/delete-question/:id', ensureAuthenticated, (req, res) => {
     const id = req.params.id;
     db.get('SELECT establishment_id FROM questions WHERE id = ?', [id], (err, row) => {
         if (err) throw err;
@@ -120,7 +156,7 @@ app.get('/delete-question/:id', (req, res) => {
     });
 });
 
-app.get('/stats/:id', (req, res) => {
+app.get('/stats/:id', ensureAuthenticated, (req, res) => {
     const id = req.params.id;
     db.get('SELECT * FROM establishments WHERE id = ?', [id], (err, establishment) => {
         if (err) throw err;
@@ -145,7 +181,7 @@ app.get('/stats/:id', (req, res) => {
     });
 });
 
-app.get('/download-stats/:id', (req, res) => {
+app.get('/download-stats/:id', ensureAuthenticated, (req, res) => {
     const id = req.params.id;
     db.get('SELECT * FROM establishments WHERE id = ?', [id], (err, establishment) => {
         if (err) throw err;

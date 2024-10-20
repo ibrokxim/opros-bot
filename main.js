@@ -1,6 +1,7 @@
 const { Telegraf, Scenes, session } = require('telegraf');
 const db = require('./database');
-const bot = new Telegraf("7710181262:AAEcoClGvLibcUsPoRdG3pZ1UNHnwZDV3OU");
+const bot = new Telegraf("7706158048:AAEj7phEO7qaN0fqWrJ8wgIYnYewrcVF1Fk");
+// const bot = new Telegraf("7710181262:AAEcoClGvLibcUsPoRdG3pZ1UNHnwZDV3OU");
 const path = require('path')
 const stage = new Scenes.Stage([], { default: 'survey' });
 const fs = require('fs');
@@ -75,7 +76,7 @@ bot.action('back', (ctx) => {
     getEstablishments(ctx);
 });
 
-bot.action(/^(yes|no|comment)$/, (ctx) => {
+bot.action(/^(yes|no|comment)$/, async (ctx) => {
     const answer = ctx.match[1];
     if (answer === 'comment') {
         ctx.reply('Введите ваш комментарий:');
@@ -83,10 +84,39 @@ bot.action(/^(yes|no|comment)$/, (ctx) => {
     } else {
         currentUser.answers.push({ type: 'text', value: answer === 'yes' ? 1 : 0 });
         currentQuestionIndex++;
-        askQuestion(ctx);
+
+        // Обновляем сообщение с вопросом
+        const question = questions[currentQuestionIndex - 1];
+        const inlineKeyboard = [
+            [{ text: 'Да' + (answer === 'yes' ? ' ✅' : ''), callback_data: 'yes' }],
+            [{ text: 'Нет' + (answer === 'no' ? ' ✅' : ''), callback_data: 'no' }],
+            [{ text: 'Оставить комментарий', callback_data: 'comment' }]
+        ];
+
+        if (question.photo_path) {
+            const photoPath = path.join(__dirname, 'uploads', question.photo_path);
+            if (fs.existsSync(photoPath)) {
+                await ctx.editMessageMedia({
+                    type: 'photo',
+                    media: fs.createReadStream(photoPath),
+                    caption: question.text
+                }, { reply_markup: { inline_keyboard: inlineKeyboard } });
+            } else {
+                await ctx.editMessageReplyMarkup({ inline_keyboard: inlineKeyboard });
+            }
+        } else {
+            await ctx.editMessageReplyMarkup({ inline_keyboard: inlineKeyboard });
+        }
+
+        // Удаляем кнопки после выбора ответа
+        setTimeout(async () => {
+            await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+            askQuestion(ctx);
+        }, 1000); // Задержка в 1 секунду перед удалением кнопок
     }
     ctx.answerCbQuery();
 });
+
 
 bot.on('text', (ctx) => {
     if (!currentUser.name) {
