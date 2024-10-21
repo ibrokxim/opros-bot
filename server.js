@@ -83,13 +83,35 @@ app.post('/add-establishment', ensureAuthenticated, (req, res) => {
     });
 });
 
+app.post('/copy-questions/:fromId/:toId', ensureAuthenticated, (req, res) => {
+    const fromId = req.params.fromId;
+    const toId = req.params.toId;
+
+    // Получаем все вопросы из заведения, которые нужно скопировать
+    db.all('SELECT * FROM questions WHERE establishment_id = ?', [fromId], (err, questions) => {
+        if (err) throw err;
+
+        // Вставляем каждый вопрос в новое заведение
+        questions.forEach(question => {
+            db.run('INSERT INTO questions (establishment_id, text, photo_path) VALUES (?, ?, ?)', [toId, question.text, question.photo_path], (err) => {
+                if (err) throw err;
+            });
+        });
+
+        res.redirect(`/edit/${toId}`);
+    });
+});
+
 app.get('/edit/:id', ensureAuthenticated, (req, res) => {
     const id = req.params.id;
     db.get('SELECT * FROM establishments WHERE id = ?', [id], (err, establishment) => {
         if (err) throw err;
         db.all('SELECT * FROM questions WHERE establishment_id = ?', [id], (err, questions) => {
             if (err) throw err;
-            res.render('edit', { establishment, questions });
+            db.all('SELECT * FROM establishments', [], (err, establishments) => {
+                if (err) throw err;
+                res.render('edit', { establishment, questions, establishments });
+            });
         });
     });
 });

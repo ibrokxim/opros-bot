@@ -147,7 +147,18 @@
             <!-- Content wrapper -->
             <div class="content-wrapper">
                 <!-- Content -->
-
+                <div class="card-body">
+                    <h2>Копировать вопросы из другого заведения</h2>
+                    <div class="mb-3">
+                        <label for="copyFromEstablishment" class="form-label">Выберите заведение</label>
+                        <select class="form-select" id="copyFromEstablishment">
+                            <% establishments.forEach(est => { %>
+                                <option value="<%= est.id %>"><%= est.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-primary" id="copyQuestionsButton">Скопировать вопросы</button>
+                </div>
                 <div class="container-xxl flex-grow-1 container-p-y">
                     <h5 class="card-header">Изменить заведение</h5>
                     <form class="card-body" method="post" action="/edit/<%= establishment.id %>">
@@ -228,22 +239,29 @@
     </div>
     <div class="layout-overlay layout-menu-toggle"></div>
 </div>
+<script>
+    document.getElementById('copyQuestionsButton').addEventListener('click', function() {
+        const fromId = document.getElementById('copyFromEstablishment').value;
+        const toId = '<%= establishment.id %>'; // ID текущего заведения
 
+        // Отправляем POST запрос на сервер для копирования вопросов
+        fetch(`/copy-questions/${fromId}/${toId}`, {
+            method: 'POST'
+        }).then(response => {
+            if (response.ok) {
+                window.location.reload(); // Перезагружаем страницу после успешного копирования
+            } else {
+                alert('Ошибка при копировании вопросов');
+            }
+        });
+    });
+</script>
 <script src="/assets/vendor/libs/jquery/jquery.js"></script>
 <script src="/assets/vendor/libs/popper/popper.js"></script>
 <script src="/assets/vendor/js/bootstrap.js"></script>
 <script src="/assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.js"></script>
 <script src="/assets/vendor/js/menu.js"></script>
-
-
-<!-- Vendors JS -->
-
-<!-- Main JS -->
 <script src="/assets/js/main.js"></script>
-
-<!-- Page JS -->
-
-<!-- Place this tag in your head or just before your close body tag. -->
 <script async defer src="https://buttons.github.io/buttons.js"></script>
 </body>
 </html>
