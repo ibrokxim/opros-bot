@@ -78,15 +78,13 @@ bot.action('back', (ctx) => {
 
 bot.action(/^(yes|no|comment)$/, async (ctx) => {
     const answer = ctx.match[1];
+    const question = questions[currentQuestionIndex];
+
     if (answer === 'comment') {
         ctx.reply('Введите ваш комментарий:');
         waitingForComment = true; // Ожидание комментария
     } else {
-        currentUser.answers.push({ type: 'text', value: answer === 'yes' ? 1 : 0 });
-        currentQuestionIndex++;
-
-        // Обновляем сообщение с вопросом
-        const question = questions[currentQuestionIndex - 1];
+        currentUser.answers[currentQuestionIndex] = { type: 'text', value: answer === 'yes' ? 1 : 0 };
         const inlineKeyboard = [
             [{ text: 'Да' + (answer === 'yes' ? ' ✅' : ''), callback_data: 'yes' }],
             [{ text: 'Нет' + (answer === 'no' ? ' ✅' : ''), callback_data: 'no' }],
@@ -108,11 +106,8 @@ bot.action(/^(yes|no|comment)$/, async (ctx) => {
             await ctx.editMessageReplyMarkup({ inline_keyboard: inlineKeyboard });
         }
 
-        // Удаляем кнопки после выбора ответа
-        setTimeout(async () => {
-            await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-            askQuestion(ctx);
-        }, 1000); // Задержка в 1 секунду перед удалением кнопок
+        currentQuestionIndex++;
+        askQuestion(ctx);
     }
     ctx.answerCbQuery();
 });
@@ -129,9 +124,6 @@ bot.on('text', (ctx) => {
         processAnswer(ctx);
     }
 });
-
-
-
 
 bot.on('photo', (ctx) => {
     if (currentQuestionIndex < questions.length) {
@@ -199,9 +191,10 @@ function getQuestionsForEstablishment(ctx, establishmentName) {
 function askQuestion(ctx) {
     if (currentQuestionIndex < questions.length) {
         const question = questions[currentQuestionIndex];
+        const answer = currentUser.answers[currentQuestionIndex] ? currentUser.answers[currentQuestionIndex].value : null;
         const inlineKeyboard = [
-            [{ text: 'Да', callback_data: 'yes' }],
-            [{ text: 'Нет', callback_data: 'no' }],
+            [{ text: 'Да' + (answer === 1 ? ' ✅' : ''), callback_data: 'yes' }],
+            [{ text: 'Нет' + (answer === 0 ? ' ✅' : ''), callback_data: 'no' }],
             [{ text: 'Оставить комментарий', callback_data: 'comment' }]
         ];
 
@@ -232,15 +225,10 @@ function processAnswer(ctx) {
     const answer = ctx.message.text;
     if (waitingForComment) {
         // Сохранение комментария
-        currentUser.comments.push(answer);
+        currentUser.comments[currentQuestionIndex - 1] = answer;
         waitingForComment = false;
-        currentQuestionIndex++;
-        askQuestion(ctx);
-    } else {
-        currentUser.answers.push({ type: 'text', value: answer === 'Да' ? 1 : 0 });
-        currentQuestionIndex++;
-        askQuestion(ctx);
     }
+    askQuestion(ctx);
 }
 
 
