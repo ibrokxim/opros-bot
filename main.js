@@ -80,34 +80,17 @@ bot.action(/^(yes|no|comment)$/, async (ctx) => {
     const answer = ctx.match[1];
     const question = questions[currentQuestionIndex];
 
-    if (answer === 'comment') {
-        ctx.reply('Введите ваш комментарий:');
-        waitingForComment = true; // Ожидание комментария
-    } else {
-        currentUser.answers[currentQuestionIndex] = { type: 'text', value: answer === 'yes' ? 1 : 0 };
-        const inlineKeyboard = [
-            [{ text: 'Да' + (answer === 'yes' ? ' ✅' : ''), callback_data: 'yes' }],
-            [{ text: 'Нет' + (answer === 'no' ? ' ✅' : ''), callback_data: 'no' }],
-            [{ text: 'Оставить комментарий', callback_data: 'comment' }]
-        ];
-
-        if (question.photo_path) {
-            const photoPath = path.join(__dirname, 'uploads', question.photo_path);
-            if (fs.existsSync(photoPath)) {
-                await ctx.editMessageMedia({
-                    type: 'photo',
-                    media: fs.createReadStream(photoPath),
-                    caption: question.text
-                }, { reply_markup: { inline_keyboard: inlineKeyboard } });
-            } else {
-                await ctx.editMessageReplyMarkup({ inline_keyboard: inlineKeyboard });
-            }
-        } else {
-            await ctx.editMessageReplyMarkup({ inline_keyboard: inlineKeyboard });
-        }
-
+    if (answer === 'yes') {
+        currentUser.answers[currentQuestionIndex] = { type: 'text', value: 1 };
         currentQuestionIndex++;
         askQuestion(ctx);
+    } else if (answer === 'no') {
+        currentUser.answers[currentQuestionIndex] = { type: 'text', value: 0 };
+        ctx.reply('Оставьте ваш комментарий:');
+        waitingForComment = true; // Ожидание комментария
+    } else if (answer === 'comment') {
+        ctx.reply('Введите ваш комментарий:');
+        waitingForComment = true; // Ожидание комментария
     }
     ctx.answerCbQuery();
 });
@@ -124,6 +107,8 @@ bot.on('text', (ctx) => {
         processAnswer(ctx);
     }
 });
+
+
 
 bot.on('photo', (ctx) => {
     if (currentQuestionIndex < questions.length) {
@@ -195,7 +180,7 @@ function askQuestion(ctx) {
         const inlineKeyboard = [
             [{ text: 'Да' + (answer === 1 ? ' ✅' : ''), callback_data: 'yes' }],
             [{ text: 'Нет' + (answer === 0 ? ' ✅' : ''), callback_data: 'no' }],
-            [{ text: 'Оставить комментарий', callback_data: 'comment' }]
+           // [{ text: 'Оставить комментарий', callback_data: 'comment' }]
         ];
 
         if (question.photo_path) {
@@ -225,10 +210,15 @@ function processAnswer(ctx) {
     const answer = ctx.message.text;
     if (waitingForComment) {
         // Сохранение комментария
-        currentUser.comments[currentQuestionIndex - 1] = answer;
+        currentUser.comments[currentQuestionIndex] = answer;
         waitingForComment = false;
+        currentQuestionIndex++;
+        askQuestion(ctx);
+    } else {
+        currentUser.answers[currentQuestionIndex] = { type: 'text', value: answer === 'Да' ? 1 : 0 };
+        currentQuestionIndex++;
+        askQuestion(ctx);
     }
-    askQuestion(ctx);
 }
 
 
