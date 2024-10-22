@@ -42,7 +42,7 @@ function ensureAuthenticated(req, res, next) {
 }
 
 app.get('/', ensureAuthenticated, (req, res) => {
-    db.all('SELECT * FROM establishments', [], (err, establishments) => {
+    db.all('SELECT * FROM establishments ORDER BY name ASC', [], (err, establishments) => {
         if (err) throw err;
         res.render('index', { establishments });
     });
