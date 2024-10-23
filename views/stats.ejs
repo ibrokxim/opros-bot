@@ -92,21 +92,21 @@
                             <p>Количество отрицательных ответов: <%= negativeAnswers %></p>
                             <p>Процент положительных ответов: <%= positivePercentage.toFixed(2) %>%</p>
                             <p>Процент отрицательных ответов: <%= negativePercentage.toFixed(2) %>%</p>
-                            <a href="/download-stats/<%= establishment.id %>" class="btn btn-primary">Скачать статистику в Excel</a>
-                        </div>
-                    </div>
-                    <div class="card mt-4">
-                        <div class="card-body">
-                            <h5 class="card-title">Комментарии</h5>
-                            <% if (comments.length > 0) { %>
-                                <ul>
-                                    <% comments.forEach(comment => { %>
-                                        <li><%= comment %></li>
-                                    <% }) %>
-                                </ul>
-                            <% } else { %>
-                                <p>Нет комментариев</p>
-                            <% } %>
+
+                            <h2>Комментарии:</h2>
+                            <ul>
+                                <% comments.forEach(comment => { %>
+                                    <li><%= comment %></li>
+                                <% }) %>
+                            </ul>
+
+                            <h2>Скачать отчет:</h2>
+                            <ul>
+                                <li><a href="/download-stats/<%= establishment.id %>/last-month">За последний месяц</a></li>
+                                <li><a href="/download-stats/<%= establishment.id %>/last-3-months">За последние 3 месяца</a></li>
+                                <li><a href="/download-stats/<%= establishment.id %>/last-6-months">За последние 6 месяцев</a></li>
+                                <li><a href="/download-stats/<%= establishment.id %>/last-year">За последний год</a></li>
+                            </ul>
                         </div>
                     </div>
                 </div>

@@ -52,6 +52,10 @@ app.get('/login', (req, res) => {
     res.render('login');
 });
 
+app.get('/dashboard', (req, res) => {
+    res.render('dashboard');
+});
+
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
     db.get('SELECT * FROM admins WHERE username = ?', [username], (err, admin) => {
@@ -203,8 +207,32 @@ app.get('/stats/:id', ensureAuthenticated, (req, res) => {
     });
 });
 
-app.get('/download-stats/:id', ensureAuthenticated, (req, res) => {
+app.get('/download-stats/:id/:period', ensureAuthenticated, (req, res) => {
     const id = req.params.id;
+    const period = req.params.period;
+    let dateFilter;
+
+    switch (period) {
+        case 'last-month':
+            dateFilter = new Date();
+            dateFilter.setMonth(dateFilter.getMonth() - 1);
+            break;
+        case 'last-3-months':
+            dateFilter = new Date();
+            dateFilter.setMonth(dateFilter.getMonth() - 3);
+            break;
+        case 'last-6-months':
+            dateFilter = new Date();
+            dateFilter.setMonth(dateFilter.getMonth() - 6);
+            break;
+        case 'last-year':
+            dateFilter = new Date();
+            dateFilter.setFullYear(dateFilter.getFullYear() - 1);
+            break;
+        default:
+            return res.status(400).send('Invalid period');
+    }
+
     db.get('SELECT * FROM establishments WHERE id = ?', [id], (err, establishment) => {
         if (err) throw err;
         db.all(`
@@ -214,8 +242,8 @@ app.get('/download-stats/:id', ensureAuthenticated, (req, res) => {
                 SUM(answer = 0) AS negative_answers,
                 GROUP_CONCAT(comment) AS comments
             FROM surveys
-            WHERE establishment_id = ?
-        `, [id], (err, stats) => {
+            WHERE establishment_id = ? AND created_at >= ?
+        `, [id, dateFilter.toISOString()], (err, stats) => {
             if (err) throw err;
             const totalSurveys = stats[0].total_surveys;
             const positiveAnswers = stats[0].positive_answers;
@@ -233,6 +261,7 @@ app.get('/download-stats/:id', ensureAuthenticated, (req, res) => {
             ];
 
             sheet.addRow({ parameter: 'Название заведения', value: establishment.name });
+            sheet.addRow({ parameter: 'Период', value: getPeriodLabel(period, dateFilter) });
             sheet.addRow({ parameter: 'Общее количество опросов', value: totalSurveys });
             sheet.addRow({ parameter: 'Количество положительных ответов', value: positiveAnswers });
             sheet.addRow({ parameter: 'Количество отрицательных ответов', value: negativeAnswers });
@@ -246,7 +275,7 @@ app.get('/download-stats/:id', ensureAuthenticated, (req, res) => {
 
             const sanitizedFilename = sanitizeFilename(establishment.name);
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename=${sanitizedFilename}_stats.xlsx`);
+            res.setHeader('Content-Disposition', `attachment; filename=${sanitizedFilename}_stats_${period}.xlsx`);
 
             return workbook.xlsx.write(res).then(() => {
                 res.status(200).end();
@@ -255,6 +284,51 @@ app.get('/download-stats/:id', ensureAuthenticated, (req, res) => {
     });
 });
 
-app.listen(3000, () => {
+function getPeriodLabel(period, dateFilter) {
+    const now = new Date();
+    let startDate, endDate;
+
+    switch (period) {
+        case 'last-month':
+            startDate = new Date(dateFilter);
+            endDate = new Date(now);
+            break;
+        case 'last-3-months':
+            startDate = new Date(dateFilter);
+            endDate = new Date(now);
+            break;
+        case 'last-6-months':
+            startDate = new Date(dateFilter);
+            endDate = new Date(now);
+            break;
+        case 'last-year':
+            startDate = new Date(dateFilter);
+            endDate = new Date(now);
+            break;
+        default:
+            return '';
+    }
+
+    const formatDate = (date) => date.toISOString().split('T')[0];
+
+    return `${getPeriodLabelText(period)}: с ${formatDate(startDate)} по ${formatDate(endDate)}`;
+}
+
+function getPeriodLabelText(period) {
+    switch (period) {
+        case 'last-month':
+            return 'Последний месяц';
+        case 'last-3-months':
+            return 'Последние 3 месяца';
+        case 'last-6-months':
+            return 'Последние 6 месяцев';
+        case 'last-year':
+            return 'Последний год';
+        default:
+            return '';
+    }
+}
+
+app.listen(3001, () => {
     console.log('Админ-панель запущена на http://localhost:3000');
 });
