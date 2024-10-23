@@ -7,6 +7,16 @@ db.serialize(() => {
         name TEXT NOT NULL
     )`);
 
+    db.run(`CREATE TABLE IF NOT EXISTS comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        establishment_id INTEGER NOT NULL,
+        comment TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(establishment_id) REFERENCES establishments(id)
+    )`);
+
     db.run(`CREATE TABLE IF NOT EXISTS questions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         establishment_id INTEGER NOT NULL,

@@ -120,7 +120,7 @@ bot.on('photo', (ctx) => {
 });
 
 function getEstablishments(ctx) {
-    db.all('SELECT * FROM establishments', [], (err, rows) => {
+    db.all('SELECT * FROM establishments ORDER BY name ASC', [], (err, rows) => {
         if (err) {
             console.error(err);
             ctx.reply('Ошибка при получении заведений');
@@ -197,7 +197,7 @@ function askQuestion(ctx) {
             ctx.reply(question.text, { reply_markup: { inline_keyboard: inlineKeyboard } });
         }
     } else {
-        ctx.reply('Спасибо за ответы!', {
+        ctx.reply('Спасибо за ответы! Напишите ваши комментарии по каждой из позиций в чеке. Нам важно ваше мнение, чтоб быть лучше!', {
             reply_markup: {
                 remove_keyboard: true // Удаляем все кнопки после завершения опроса
             }
