@@ -101,12 +101,25 @@
                             </ul>
 
                             <h2>Скачать отчет:</h2>
-                            <ul>
-                                <li><a href="/download-stats/<%= establishment.id %>/last-month">За последний месяц</a></li>
-                                <li><a href="/download-stats/<%= establishment.id %>/last-3-months">За последние 3 месяца</a></li>
-                                <li><a href="/download-stats/<%= establishment.id %>/last-6-months">За последние 6 месяцев</a></li>
-                                <li><a href="/download-stats/<%= establishment.id %>/last-year">За последний год</a></li>
-                            </ul>
+                            <form action="/download-stats/<%= establishment.id %>" method="get">
+                                <label for="period">Выберите период:</label>
+                                <select name="period" id="period">
+                                    <option value="last-month">Последний месяц</option>
+                                    <option value="last-3-months">Последние 3 месяца</option>
+                                    <option value="last-6-months">Последние 6 месяцев</option>
+                                    <option value="last-year">Последний год</option>
+                                </select>
+                                <button type="submit" class="btn btn-primary">Скачать отчет</button>
+                            </form>
+
+                            <h2>Скачать отчет за произвольный период:</h2>
+                            <form action="/download-stats/<%= establishment.id %>" method="get">
+                                <label for="startDate">От:</label>
+                                <input type="date" name="startDate" id="startDate" required>
+                                <label for="endDate">До:</label>
+                                <input type="date" name="endDate" id="endDate" required>
+                                <button type="submit" class="btn btn-primary">Скачать отчет</button>
+                            </form>
                         </div>
                     </div>
                 </div>
