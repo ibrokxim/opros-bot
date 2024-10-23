@@ -207,35 +207,51 @@ app.get('/stats/:id', ensureAuthenticated, (req, res) => {
     });
 });
 
-app.get('/download-stats/:id/:period', ensureAuthenticated, (req, res) => {
+app.get('/download-stats/:id', ensureAuthenticated, (req, res) => {
     const id = req.params.id;
-    const period = req.params.period;
+    const period = req.query.period;
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+
     let dateFilter;
 
-    switch (period) {
-        case 'last-month':
-            dateFilter = new Date();
-            dateFilter.setMonth(dateFilter.getMonth() - 1);
-            break;
-        case 'last-3-months':
-            dateFilter = new Date();
-            dateFilter.setMonth(dateFilter.getMonth() - 3);
-            break;
-        case 'last-6-months':
-            dateFilter = new Date();
-            dateFilter.setMonth(dateFilter.getMonth() - 6);
-            break;
-        case 'last-year':
-            dateFilter = new Date();
-            dateFilter.setFullYear(dateFilter.getFullYear() - 1);
-            break;
-        default:
-            return res.status(400).send('Invalid period');
+    if (period) {
+        switch (period) {
+            case 'last-month':
+                dateFilter = new Date();
+                dateFilter.setMonth(dateFilter.getMonth() - 1);
+                break;
+            case 'last-3-months':
+                dateFilter = new Date();
+                dateFilter.setMonth(dateFilter.getMonth() - 3);
+                break;
+            case 'last-6-months':
+                dateFilter = new Date();
+                dateFilter.setMonth(dateFilter.getMonth() - 6);
+                break;
+            case 'last-year':
+                dateFilter = new Date();
+                dateFilter.setFullYear(dateFilter.getFullYear() - 1);
+                break;
+            default:
+                return res.status(400).send('Invalid period');
+        }
+    } else if (startDate && endDate) {
+        const startDateObj = new Date(startDate);
+        const endDateObj = new Date(endDate);
+
+        if (isNaN(startDateObj.getTime()) || isNaN(endDateObj.getTime())) {
+            return res.status(400).send('Invalid date format');
+        }
+
+        dateFilter = { start: startDateObj, end: endDateObj };
+    } else {
+        return res.status(400).send('Either period or startDate and endDate are required');
     }
 
     db.get('SELECT * FROM establishments WHERE id = ?', [id], (err, establishment) => {
         if (err) throw err;
-        db.all(`
+        const query = period ? `
             SELECT 
                 COUNT(*) AS total_surveys,
                 SUM(answer = 1) AS positive_answers,
@@ -243,7 +259,19 @@ app.get('/download-stats/:id/:period', ensureAuthenticated, (req, res) => {
                 GROUP_CONCAT(comment) AS comments
             FROM surveys
             WHERE establishment_id = ? AND created_at >= ?
-        `, [id, dateFilter.toISOString()], (err, stats) => {
+        ` : `
+            SELECT 
+                COUNT(*) AS total_surveys,
+                SUM(answer = 1) AS positive_answers,
+                SUM(answer = 0) AS negative_answers,
+                GROUP_CONCAT(comment) AS comments
+            FROM surveys
+            WHERE establishment_id = ? AND created_at >= ? AND created_at <= ?
+        `;
+
+        const params = period ? [id, dateFilter.toISOString()] : [id, dateFilter.start.toISOString(), dateFilter.end.toISOString()];
+
+        db.all(query, params, (err, stats) => {
             if (err) throw err;
             const totalSurveys = stats[0].total_surveys;
             const positiveAnswers = stats[0].positive_answers;
@@ -261,7 +289,11 @@ app.get('/download-stats/:id/:period', ensureAuthenticated, (req, res) => {
             ];
 
             sheet.addRow({ parameter: 'Название заведения', value: establishment.name });
-            sheet.addRow({ parameter: 'Период', value: getPeriodLabel(period, dateFilter) });
+            if (period) {
+                sheet.addRow({ parameter: 'Период', value: getPeriodLabel(period, dateFilter) });
+            } else {
+                sheet.addRow({ parameter: 'Период', value: `с ${startDate} по ${endDate}` });
+            }
             sheet.addRow({ parameter: 'Общее количество опросов', value: totalSurveys });
             sheet.addRow({ parameter: 'Количество положительных ответов', value: positiveAnswers });
             sheet.addRow({ parameter: 'Количество отрицательных ответов', value: negativeAnswers });
@@ -274,8 +306,9 @@ app.get('/download-stats/:id/:period', ensureAuthenticated, (req, res) => {
             });
 
             const sanitizedFilename = sanitizeFilename(establishment.name);
+            const filename = period ? `${sanitizedFilename}_stats_${period}.xlsx` : `${sanitizedFilename}_stats_${startDate}_to_${endDate}.xlsx`;
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename=${sanitizedFilename}_stats_${period}.xlsx`);
+            res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
 
             return workbook.xlsx.write(res).then(() => {
                 res.status(200).end();
