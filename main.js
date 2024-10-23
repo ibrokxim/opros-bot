@@ -95,7 +95,6 @@ bot.action(/^(yes|no|comment)$/, async (ctx) => {
     ctx.answerCbQuery();
 });
 
-
 bot.on('text', (ctx) => {
     if (!currentUser.name) {
         currentUser.name = ctx.message.text;
@@ -180,7 +179,7 @@ function askQuestion(ctx) {
         const inlineKeyboard = [
             [{ text: 'Да' + (answer === 1 ? ' ✅' : ''), callback_data: 'yes' }],
             [{ text: 'Нет' + (answer === 0 ? ' ✅' : ''), callback_data: 'no' }],
-           // [{ text: 'Оставить комментарий', callback_data: 'comment' }]
+            // [{ text: 'Оставить комментарий', callback_data: 'comment' }]
         ];
 
         if (question.photo_path) {
