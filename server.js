@@ -362,6 +362,6 @@ function getPeriodLabelText(period) {
     }
 }
 
-app.listen(3001, () => {
+app.listen(3000, () => {
     console.log('Админ-панель запущена на http://localhost:3000');
 });

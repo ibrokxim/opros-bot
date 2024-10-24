@@ -14,10 +14,6 @@ let questions = [];
 let waitingForComment = false; // Флаг для ожидания комментария
 let confirmationMessageId = null;
 
-bot.command('testphoto', (ctx) => {
-    const photoPath = path.join(__dirname, 'uploads', '1729139664243.png');
-    ctx.sendPhoto({ source: fs.createReadStream(photoPath) });
-});
 
 bot.start((ctx) => {
     ctx.reply('Привет! Добро пожаловать в наш бот для тайных опросов!\nВведите пожалуйста ваше ФИО:');
@@ -25,9 +21,11 @@ bot.start((ctx) => {
         name: '',
         establishment: '',
         answers: [],
-        comments: []
+        comments: [],
+        surveyCompleted: false
     };
 });
+
 
 bot.action('continue', (ctx) => {
     ctx.answerCbQuery();
@@ -68,34 +66,59 @@ bot.action('continue', (ctx) => {
 bot.action('back', (ctx) => {
     ctx.answerCbQuery();
     currentUser = {
-        name: currentUser.name,
-        establishment: '',
-        answers: [],
-        comments: []
+        name: currentUser.name, // оставляем имя
+        establishment: '', // сбрасываем выбор заведения
+        answers: [], // сбрасываем ответы
+        comments: [], // сбрасываем комментарии
+        surveyCompleted: false // флаг завершения опроса сбрасывается
     };
-    getEstablishments(ctx);
+    getEstablishments(ctx); // возвращаем выбор заведения
 });
 
-bot.action(/^(yes|no|comment)$/, async (ctx) => {
+bot.action(/^(yes|no)$/, async (ctx) => {
     const answer = ctx.match[1];
     const question = questions[currentQuestionIndex];
 
+    // Сохранение ответа
     if (answer === 'yes') {
         currentUser.answers[currentQuestionIndex] = { type: 'text', value: 1 };
-        currentQuestionIndex++;
-        askQuestion(ctx);
     } else if (answer === 'no') {
         currentUser.answers[currentQuestionIndex] = { type: 'text', value: 0 };
+    }
+
+    // Пересоздаем кнопки с галочкой
+    const inlineKeyboard = [
+        [{ text: 'Да' + (currentUser.answers[currentQuestionIndex].value === 1 ? ' ✅' : ''), callback_data: 'yes' }],
+        [{ text: 'Нет' + (currentUser.answers[currentQuestionIndex].value === 0 ? ' ✅' : ''), callback_data: 'no' }]
+    ];
+
+    // Обновляем сообщение с вопросом и новыми кнопками
+    await ctx.editMessageText(question.text, {
+        reply_markup: {
+            inline_keyboard: inlineKeyboard
+        }
+    });
+
+    // Если ответ был "да", сразу переходим к следующему вопросу
+    if (answer === 'yes') {
+        currentQuestionIndex++;
+        askQuestion(ctx);
+    } else {
+        // Ожидание комментария для ответа "нет"
         ctx.reply('Оставьте ваш комментарий:');
         waitingForComment = true; // Ожидание комментария
-    } else if (answer === 'comment') {
-        ctx.reply('Введите ваш комментарий:');
-        waitingForComment = true; // Ожидание комментария
     }
-    ctx.answerCbQuery();
 });
 
+
+
+
 bot.on('text', (ctx) => {
+    if (currentUser.surveyCompleted) {
+        // Игнорируем сообщения после завершения опроса
+        return;
+    }
+
     if (!currentUser.name) {
         currentUser.name = ctx.message.text;
         getEstablishments(ctx);
@@ -178,8 +201,7 @@ function askQuestion(ctx) {
         const answer = currentUser.answers[currentQuestionIndex] ? currentUser.answers[currentQuestionIndex].value : null;
         const inlineKeyboard = [
             [{ text: 'Да' + (answer === 1 ? ' ✅' : ''), callback_data: 'yes' }],
-            [{ text: 'Нет' + (answer === 0 ? ' ✅' : ''), callback_data: 'no' }],
-            // [{ text: 'Оставить комментарий', callback_data: 'comment' }]
+            [{ text: 'Нет' + (answer === 0 ? ' ✅' : ''), callback_data: 'no' }]
         ];
 
         if (question.photo_path) {
@@ -195,24 +217,34 @@ function askQuestion(ctx) {
         } else {
             ctx.reply(question.text, { reply_markup: { inline_keyboard: inlineKeyboard } });
         }
-    } else {
+    } else if (!currentUser.surveyCompleted) {
+        currentUser.surveyCompleted = true; // Отмечаем, что опрос завершен
         ctx.reply('Спасибо за ответы! Напишите ваши комментарии по каждой из позиций в чеке. Нам важно ваше мнение, чтоб быть лучше!', {
             reply_markup: {
                 remove_keyboard: true // Удаляем все кнопки после завершения опроса
             }
         });
-        saveSurveyResults(ctx);
+        waitingForComment = true; // Ожидание комментария
     }
 }
+
 
 function processAnswer(ctx) {
     const answer = ctx.message.text;
     if (waitingForComment) {
         // Сохранение комментария
         currentUser.comments[currentQuestionIndex] = answer;
-        waitingForComment = false;
-        currentQuestionIndex++;
-        askQuestion(ctx);
+
+        // Проверяем, есть ли еще вопросы для комментариев
+        if (currentQuestionIndex < questions.length) {
+            currentQuestionIndex++;
+            askQuestion(ctx);
+        } else {
+            waitingForComment = false; // Комментарии завершены
+            ctx.reply('Ваши комментарии сохранены! Спасибо за участие.');
+            currentUser.surveyCompleted = true; // Отмечаем опрос как завершенный
+            saveSurveyResults(ctx); // Сохраняем результаты опроса
+        }
     } else {
         currentUser.answers[currentQuestionIndex] = { type: 'text', value: answer === 'Да' ? 1 : 0 };
         currentQuestionIndex++;
@@ -220,18 +252,30 @@ function processAnswer(ctx) {
     }
 }
 
-
 function saveSurveyResults(ctx) {
     db.get('SELECT id FROM establishments WHERE name = ?', [currentUser.establishment], (err, row) => {
         if (err) throw err;
         currentUser.answers.forEach((answer, index) => {
-            db.run('INSERT INTO surveys (user_name, establishment_id, answer, comment) VALUES (?, ?, ?, ?)', [
-                currentUser.name,
-                row.id,
-                answer.value,
-                currentUser.comments[index] || null
-            ]);
+            if (answer.value !== null) {
+                db.run('INSERT INTO surveys (user_name, establishment_id, answer, comment) VALUES (?, ?, ?, ?)', [
+                    currentUser.name,
+                    row.id,
+                    answer.value,
+                    currentUser.comments[index] || null
+                ]);
+            }
         });
+    });
+}
+
+function saveComment(ctx, comment) {
+    db.get('SELECT id FROM establishments WHERE name = ?', [currentUser.establishment], (err, row) => {
+        if (err) throw err;
+        db.run('INSERT INTO comments (user_id, establishment_id, comment) VALUES (?, ?, ?)', [
+            ctx.from.id,
+            row.id,
+            comment
+        ]);
     });
 }
 
