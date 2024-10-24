@@ -191,7 +191,8 @@ app.get('/stats/:id', ensureAuthenticated, (req, res) => {
                 COUNT(*) AS total_surveys,
                 SUM(answer = 1) AS positive_answers,
                 SUM(answer = 0) AS negative_answers,
-                GROUP_CONCAT(comment) AS comments
+                GROUP_CONCAT(comment) AS comments,
+                GROUP_CONCAT(comment_last) AS last_comments
             FROM surveys
             WHERE establishment_id = ?
         `, [id], (err, stats) => {
@@ -202,7 +203,8 @@ app.get('/stats/:id', ensureAuthenticated, (req, res) => {
             const positivePercentage = totalSurveys ? (positiveAnswers / totalSurveys) * 100 : 0;
             const negativePercentage = totalSurveys ? (negativeAnswers / totalSurveys) * 100 : 0;
             const comments = stats[0].comments ? stats[0].comments.split(',') : [];
-            res.render('stats', { establishment, totalSurveys, positiveAnswers, negativeAnswers, positivePercentage, negativePercentage, comments });
+            const lastComments = stats[0].last_comments ? stats[0].last_comments.split(',') : [];
+            res.render('stats', { establishment, totalSurveys, positiveAnswers, negativeAnswers, positivePercentage, negativePercentage, comments, lastComments });
         });
     });
 });

@@ -99,6 +99,12 @@
                                     <li><%= comment %></li>
                                 <% }) %>
                             </ul>
+                            <h2>Последние комментарии:</h2>
+                            <ul>
+                                <% lastComments.forEach(lastComment => { %>
+                                    <li><%= lastComment %></li>
+                                <% }) %>
+                            </ul>
 
                             <h2>Скачать отчет:</h2>
                             <form action="/download-stats/<%= establishment.id %>" method="get">

@@ -9,7 +9,7 @@ db.serialize(() => {
 
     db.run(`CREATE TABLE IF NOT EXISTS comments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
+        user_name TEXT NOT NULL,
         establishment_id INTEGER NOT NULL,
         comment TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -32,6 +32,7 @@ db.serialize(() => {
         establishment_id INTEGER NOT NULL,
         answer INTEGER NOT NULL,
         comment TEXT,
+        comment_last TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(establishment_id) REFERENCES establishments(id)
     )`);
