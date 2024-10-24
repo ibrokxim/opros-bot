@@ -258,8 +258,13 @@ function processAnswer(ctx) {
         waitingForLastComment = false;
         currentUser.surveyCompleted = true;
     } else {
-        saveSurveyAnswer(currentUser.name, currentUser.establishmentId, answer === 'Да' ? 1 : 0, answer);
-        currentUser.answers[currentQuestionIndex] = { type: 'text', value: answer === 'Да' ? 1 : 0 };
+        if (currentUser.answers.length <= currentQuestionIndex) {
+            currentUser.answers[currentQuestionIndex] = { type: 'text', value: null }; // Создайте элемент с пустым значением
+        }
+
+        const answerValue = answer === 'Да' ? 1 : 0; // Преобразуем ответ в значение
+        saveSurveyAnswer(currentUser.name, currentUser.establishmentId, answerValue, answer); // Сохраняем ответ
+        currentUser.answers[currentQuestionIndex].value = answerValue; // Сохраняем значение ответа
         currentQuestionIndex++;
         askQuestion(ctx);
     }
@@ -275,20 +280,22 @@ function saveCommentToDB(ctx, comment) {
 
         if (establishmentRow) {
             const establishmentId = establishmentRow.id;
-            db.run('INSERT INTO comments (user_id, establishment_id, comment) VALUES (?, ?, ?)', [
-                ctx.from.id, // Используем id пользователя из Telegram
-                establishmentId,
-                comment
+
+            // Обновляем запись в таблице surveys, добавляя комментарий
+            db.run('UPDATE surveys SET comment = ? WHERE user_name = ? AND establishment_id = ?', [
+                comment,
+                currentUser.name, // Имя пользователя, которое вы уже сохраняете
+                establishmentId
             ], (err) => {
                 if (err) {
                     console.error('Ошибка при сохранении комментария:', err);
-
                 } else {
-                    console.log('Комментарий сохранен в БД.');
+                    console.log('Комментарий сохранен в поле comments таблицы surveys.');
                 }
             });
         }
     });
 }
+
 
 bot.launch();
